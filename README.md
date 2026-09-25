@@ -2,8 +2,6 @@
 
 OpenNari is an open-source Windows app for the Razer Nari Ultimate. It controls HyperSense strength from 0 to 100%, switches the earcup lighting, and applies a custom static color through the headset's USB receiver. The commands were tested on a connected Nari Ultimate.
 
-![OpenNari desktop window](docs/images/open-nari.png)
-
 ## Build
 
 Install the .NET 10 SDK on Windows, then run:
