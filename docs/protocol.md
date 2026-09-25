@@ -11,7 +11,10 @@ The settings interface is USB interface 5, HID collection 3 on Windows. Its feat
 | HyperSense on, strength 30…90 | same report; last byte `1E`…`5A` | same capture |
 | Static lighting off | `FF 0A 00 FF 04 12 F1 03 71 00` | `static led off.pcapng` |
 | Static lighting on | `FF 0A 00 FF 04 12 F1 03 71 FF` | `static led on.pcapng` |
+| Static color RGB | `FF 0A 00 FF 04 12 F1 05 72 RR GG BB` | [OpenRGB Nari Ultimate issue capture](https://gitlab.com/CalcProgrammer1/OpenRGB/-/issues/2114) |
 
-The capture does not show a color selection report. OpenNari currently exposes only the verified lighting on/off command. The HyperSense strength byte appears to be a direct percent, but values outside the captured 20–100 range still need hardware verification. The app uses 20–100 as its selectable range.
+The OpenRGB capture contains changing RGB triples in the command above. OpenNari applies a steady color by sending one report after turning the lights on. A connected headset confirmed that an `FF0000` color command turns the earcups red. Other colors should be checked on hardware.
+
+The HyperSense strength byte appears to be a direct percent. The captures cover 20–100; a connected headset confirmed that sending the on flag with intensity 0 makes the haptics quiet. The app allows 0–100.
 
 `GET_REPORT` replies in the captures do not clearly contain the current settings, so the app does not claim to know the headset's state when it opens. It shows only settings sent in the current session.
