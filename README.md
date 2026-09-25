@@ -1,6 +1,8 @@
 # OpenNari
 
-OpenNari is an open-source Windows app for the Razer Nari Ultimate. The first milestone is a clean desktop interface and a reliable way to identify the headset's USB HID interface. HyperSense and Chroma controls will be enabled only when their commands have been confirmed on hardware.
+OpenNari is an open-source Windows app for the Razer Nari Ultimate. It controls HyperSense strength and the earcup lighting switch through the headset's USB receiver. These commands were tested on a connected Nari Ultimate.
+
+![OpenNari desktop window](docs/images/open-nari.png)
 
 ## Build
 
@@ -15,7 +17,7 @@ The app does not replace an audio driver. Sound and microphone continue to use t
 
 ## Status
 
-This is an early hardware research project. The connected Nari Ultimate has USB IDs `1532:051A` for the receiver and `1532:051B` for the headset when attached by cable. Captures from Synapse show HyperSense strength and static lighting on/off commands. See [protocol notes](docs/protocol.md) for the exact bytes and limits.
+This is an early hardware research project. The connected Nari Ultimate has USB IDs `1532:051A` for the receiver and `1532:051B` for the headset when attached by cable. Captures from Synapse show HyperSense strength and static lighting on/off commands. See [protocol notes](docs/protocol.md) for the exact bytes and limits. Color selection and lighting effects still need protocol research.
 
 To inspect the attached HID interfaces, run `dotnet run --project tools/OpenNari.Probe`. The probe also accepts `read`, `haptics on 50`, `haptics off 50`, `light on`, and `light off`. Only the receiver's settings collection receives commands.
 
