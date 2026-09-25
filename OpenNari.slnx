@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/OpenNari.Core/OpenNari.Core.csproj" />
     <Project Path="src/OpenNari/OpenNari.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/OpenNari.Probe/OpenNari.Probe.csproj" />
   </Folder>
 </Solution>

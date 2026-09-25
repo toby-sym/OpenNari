@@ -15,12 +15,15 @@ The app does not replace an audio driver. Sound and microphone continue to use t
 
 ## Status
 
-This is an early hardware research project. The connected Nari Ultimate has USB IDs `1532:051A` for the receiver and `1532:051B` for the headset when attached by cable. Device detection and settings controls are being developed in small, tested steps. The interface will distinguish verified controls from commands still under investigation.
+This is an early hardware research project. The connected Nari Ultimate has USB IDs `1532:051A` for the receiver and `1532:051B` for the headset when attached by cable. Captures from Synapse show HyperSense strength and static lighting on/off commands. See [protocol notes](docs/protocol.md) for the exact bytes and limits.
+
+To inspect the attached HID interfaces, run `dotnet run --project tools/OpenNari.Probe`. The probe also accepts `read`, `haptics on 50`, `haptics off 50`, `light on`, and `light off`. Only the receiver's settings collection receives commands.
 
 ## References
 
 - [OpenRGB Nari Ultimate device report and USB capture](https://gitlab.com/CalcProgrammer1/OpenRGB/-/issues/2114)
 - [Razer Nari pairing protocol research](https://github.com/juanjodarko/razer-nari-pairing)
 - [Earlier Linux Nari driver research](https://github.com/felixZmn/razer-nari-driver)
+- [HidSharp](https://github.com/IntergatedCircuits/HidSharp) for Windows HID access
 
 OpenNari is an independent community project and is not affiliated with Razer.
