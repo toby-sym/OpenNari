@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
 using OpenNari.Core;
@@ -16,6 +18,10 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        var appVersion = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion.Split('+')[0] ?? "0.1.0";
+        VersionText.Text = $"Version {appVersion}";
         await ConnectAsync();
     }
 
@@ -35,8 +41,9 @@ public partial class MainWindow : Window
         UpdateButtons();
         headset?.Dispose();
         headset = null;
-        ConnectionText.Text = "Looking for the receiver…";
+        ConnectionText.Text = "Looking for receiver";
         ConnectionDetail.Text = "Checking USB interface 5, collection 3";
+        ConnectionIndicator.Fill = new SolidColorBrush(Color.FromRgb(213, 156, 66));
 
         try
         {
@@ -44,15 +51,17 @@ public partial class MainWindow : Window
             if (headset is null)
             {
                 ConnectionText.Text = "Receiver not found";
-                ConnectionDetail.Text = "Connect the Nari Ultimate receiver, then try again.";
-                ShowStatus("The settings interface is unavailable.", true);
+                ConnectionDetail.Text = "Connect the Nari Ultimate receiver";
+                ConnectionIndicator.Fill = new SolidColorBrush(Color.FromRgb(189, 69, 59));
+                ShowStatus("The headset settings interface is unavailable.", true);
             }
             else
             {
                 ConnectionText.Text = "Receiver connected";
                 ConnectionDetail.Text = "Razer Nari Ultimate · 1532:051A";
-                HapticsStateText.Text = "Not set";
-                LightingStateText.Text = "Not set in this session";
+                ConnectionIndicator.Fill = new SolidColorBrush(Color.FromRgb(39, 151, 105));
+                HapticsStateText.Text = "No haptic command sent in this session";
+                LightingStateText.Text = "No lighting command sent in this session";
                 ShowStatus("Connected. Choose a setting to send to the headset.");
             }
         }
@@ -60,6 +69,7 @@ public partial class MainWindow : Window
         {
             ConnectionText.Text = "Could not connect";
             ConnectionDetail.Text = error.Message;
+            ConnectionIndicator.Fill = new SolidColorBrush(Color.FromRgb(189, 69, 59));
             ShowStatus("Windows could not open the receiver settings interface.", true);
         }
         finally
@@ -82,8 +92,10 @@ public partial class MainWindow : Window
         var strength = (int)StrengthSlider.Value;
         await SendAsync(
             device => device.SetHaptics(true, strength),
-            $"HyperSense on at {strength}%",
-            () => HapticsStateText.Text = $"On · {strength}%");
+            $"HyperSense set to {strength}%",
+            () => HapticsStateText.Text = strength == 0
+                ? "On at 0% in this session"
+                : $"On at {strength}% in this session");
     }
 
     private async void HapticsOff_Click(object sender, RoutedEventArgs e)
@@ -92,7 +104,7 @@ public partial class MainWindow : Window
         await SendAsync(
             device => device.SetHaptics(false, strength),
             "HyperSense off",
-            () => HapticsStateText.Text = "Off");
+            () => HapticsStateText.Text = "Off command sent in this session");
     }
 
     private async void LightingOn_Click(object sender, RoutedEventArgs e)
@@ -109,6 +121,37 @@ public partial class MainWindow : Window
             device => device.SetLightingEnabled(false),
             "Lighting off",
             () => LightingStateText.Text = "Off command sent in this session");
+    }
+
+    private async void ApplyColor_Click(object sender, RoutedEventArgs e)
+    {
+        var hex = HexColorInput.Text.Trim().TrimStart('#');
+        if (hex.Length != 6 ||
+            !byte.TryParse(hex.AsSpan(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var red) ||
+            !byte.TryParse(hex.AsSpan(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var green) ||
+            !byte.TryParse(hex.AsSpan(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var blue))
+        {
+            ShowStatus("Enter a six digit color such as #00C878.", true);
+            HexColorInput.Focus();
+            return;
+        }
+
+        var colorText = $"#{red:X2}{green:X2}{blue:X2}";
+        HexColorInput.Text = colorText;
+        await SendAsync(
+            device =>
+            {
+                device.SetLightingEnabled(true);
+                // Synapse spaces the on and color reports apart in the capture.
+                Thread.Sleep(100);
+                return device.SetLightingColor(red, green, blue);
+            },
+            $"Color {colorText}",
+            () =>
+            {
+                SelectedColorPreview.Background = new SolidColorBrush(Color.FromRgb(red, green, blue));
+                LightingStateText.Text = $"Color {colorText} sent in this session";
+            });
     }
 
     private async Task SendAsync(Func<NariDevice, byte[]> command, string setting, Action updateState)
@@ -148,6 +191,8 @@ public partial class MainWindow : Window
         HapticsOffButton.IsEnabled = ready;
         LightingOnButton.IsEnabled = ready;
         LightingOffButton.IsEnabled = ready;
+        ApplyColorButton.IsEnabled = ready;
+        HexColorInput.IsEnabled = ready;
         StrengthSlider.IsEnabled = ready;
     }
 

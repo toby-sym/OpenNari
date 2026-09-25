@@ -24,8 +24,18 @@ if (args.Length > 0)
         case "light" when args.Length == 2 && args[1] is "on" or "off":
             report = headset.SetLightingEnabled(args[1] == "on");
             break;
+        case "color" when args.Length == 2 && args[1].Length == 6:
+            byte[] color;
+            try { color = Convert.FromHexString(args[1]); }
+            catch (FormatException)
+            {
+                Console.Error.WriteLine("Color must be six hexadecimal digits, such as FF0000.");
+                return 2;
+            }
+            report = headset.SetLightingColor(color[0], color[1], color[2]);
+            break;
         default:
-            Console.Error.WriteLine("Use: read | haptics on|off 20-100 | light on|off");
+            Console.Error.WriteLine("Use: read | haptics on|off 0-100 | light on|off | color RRGGBB");
             return 2;
     }
 

@@ -40,7 +40,7 @@ public sealed class NariDevice : IDisposable
 
     public byte[] SetHaptics(bool enabled, int intensity)
     {
-        if (intensity is < 20 or > 100)
+        if (intensity is < 0 or > 100)
         {
             throw new ArgumentOutOfRangeException(nameof(intensity));
         }
@@ -54,6 +54,13 @@ public sealed class NariDevice : IDisposable
     {
         // Captures of the static lighting switch differ only in the last byte.
         return SendReport(0x12, 0xF1, 0x03, 0x71, enabled ? (byte)0xFF : (byte)0);
+    }
+
+    public byte[] SetLightingColor(byte red, byte green, byte blue)
+    {
+        // The OpenRGB issue capture streams changing RGB triples with this
+        // command. A single report may be enough for a steady color.
+        return SendReport(0x12, 0xF1, 0x05, 0x72, red, green, blue);
     }
 
     public byte[] ReadFeatureReport()
