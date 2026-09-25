@@ -1,5 +1,7 @@
 using System.Globalization;
+#if RELEASE_BUILD
 using System.Reflection;
+#endif
 using System.Windows;
 using System.Windows.Media;
 using OpenNari.Core;
@@ -18,10 +20,13 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+#if RELEASE_BUILD
         var appVersion = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion.Split('+')[0] ?? "0.1.0";
+            .InformationalVersion.Split('+')[0] ?? "unknown";
         VersionText.Text = $"Version {appVersion}";
+        VersionText.Visibility = Visibility.Visible;
+#endif
         await ConnectAsync();
     }
 

@@ -198,7 +198,7 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <TextBlock x:Name="StatusText" Text="Ready to connect." Foreground="{StaticResource Ink}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
-                            <TextBlock x:Name="VersionText" Text="Version 0.1.0" Foreground="{StaticResource Ink}" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                            <TextBlock x:Name="VersionText" Text="Version" Visibility="Collapsed" Foreground="{StaticResource Ink}" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                             <TextBlock Text="Lighting effects are under research" Foreground="{StaticResource Muted}" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Right"/>
                         </StackPanel>
                     </Grid>
