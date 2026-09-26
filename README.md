@@ -15,10 +15,7 @@ The app does not replace an audio driver. Sound and microphone continue to use t
 
 ## Portable Windows app
 
-The Actions workflow builds a single self-contained Windows x64 executable for pull requests, pushes to `main`, and manual runs. Open **Actions**, choose **Build portable Windows app**, then select **Run workflow**:
-
-- Choose `dev` for a development build. It has no version stamp.
-- Choose `release` and enter a version in `X.Y.Z` form, such as `1.2.3`. The app shows that version, and the workflow creates the `v1.2.3` tag and GitHub release with the executable only.
+The Actions workflow builds a single self-contained Windows x64 executable
 
 ## References
 
