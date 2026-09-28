@@ -1,6 +1,8 @@
 # OpenNari
 
-OpenNari is an open-source Windows app for the Razer Nari Ultimate. It controls HyperSense strength from 0 to 100%, switches the earcup lighting, and applies a custom static color through the headset's USB receiver. The commands were tested on a connected Nari Ultimate.
+OpenNari is an open-source Windows app for the Razer Nari Ultimate. It shows headset battery level and charging status, controls HyperSense strength from 0 to 100%, switches the earcup lighting, and applies a custom static color through the headset's USB receiver. The commands were tested on a connected Nari Ultimate.
+
+Battery status refreshes every 15 seconds while the receiver is connected. The approximate percentage uses receiver voltage while discharging and the headset's reported level while charging. Changes are limited to 5% steps to avoid sudden firmware jumps. The charge state is reported directly by the receiver; unavailable readings are shown as such. The status report format and initial voltage range are based on [NariMeter's receiver protocol research](https://github.com/indina853/NariMeter#how-it-works--reverse-engineering-the-protocol).
 
 ## Build
 

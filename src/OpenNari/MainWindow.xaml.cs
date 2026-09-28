@@ -1,9 +1,12 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 #if RELEASE_BUILD
 using System.Reflection;
 #endif
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using OpenNari.Core;
 
 namespace OpenNari;
@@ -12,10 +15,100 @@ public partial class MainWindow : Window
 {
     private NariDevice? headset;
     private bool isBusy;
+    private bool isReadingBattery;
+    private int batteryGeneration;
+    private int missedBatteryReads;
+    private bool darkModeActive;
+    private bool statusIsError;
+    private readonly BatteryLevelEstimator batteryEstimator = new();
+    private readonly DispatcherTimer batteryTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     public MainWindow()
     {
         InitializeComponent();
+        SourceInitialized += Window_SourceInitialized;
+        batteryTimer.Tick += BatteryTimer_Tick;
+    }
+
+    private void Window_SourceInitialized(object? sender, EventArgs e)
+    {
+        ApplyCaptionTheme();
+    }
+
+    private void ApplyCaptionTheme()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            return;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        var captionColor = darkModeActive ? 0x0026281E : 0x00F0F1EA;
+        var textColor = darkModeActive ? 0x00F3F5ED : 0x002B2C18;
+        DwmSetWindowAttribute(handle, 35, ref captionColor, sizeof(int));
+        DwmSetWindowAttribute(handle, 36, ref textColor, sizeof(int));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int valueSize);
+
+    private void ThemeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        darkModeActive = !darkModeActive;
+        var palette = darkModeActive
+            ? new Dictionary<string, string>
+            {
+                ["Ink"] = "#EFF6F4",
+                ["Muted"] = "#A9BCB8",
+                ["Accent"] = "#64D9B1",
+                ["WindowSurface"] = "#E0192826",
+                ["SurfaceBorder"] = "#557C8D86",
+                ["CardSurface"] = "#E0243330",
+                ["CardBorder"] = "#6D84927F",
+                ["QuietBackground"] = "#3549443F",
+                ["QuietForeground"] = "#E7F7F2",
+                ["InputSurface"] = "#D8293935",
+                ["InputBorder"] = "#70877F",
+                ["BatterySurface"] = "#313F3B",
+                ["HeaderSurface"] = "#DC283632",
+                ["ConnectionSurface"] = "#AA263936",
+                ["FooterSurface"] = "#D822312E",
+                ["FooterBorder"] = "#667F847E",
+                ["Separator"] = "#667C8984"
+            }
+            : new Dictionary<string, string>
+            {
+                ["Ink"] = "#182C2B",
+                ["Muted"] = "#647C79",
+                ["Accent"] = "#137B64",
+                ["WindowSurface"] = "#DAFFFFFF",
+                ["SurfaceBorder"] = "#F5FFFFFF",
+                ["CardSurface"] = "#EFFFFFFF",
+                ["CardBorder"] = "#AFCBDCD8",
+                ["QuietBackground"] = "#DDECE9",
+                ["QuietForeground"] = "#24544C",
+                ["InputSurface"] = "#EFFFFFFF",
+                ["InputBorder"] = "#B8D5D1",
+                ["BatterySurface"] = "#E4F3EF",
+                ["HeaderSurface"] = "#D9FFFFFF",
+                ["ConnectionSurface"] = "#A9EAF4F1",
+                ["FooterSurface"] = "#93FFFFFF",
+                ["FooterBorder"] = "#D8FFFFFF",
+                ["Separator"] = "#B3D9D9D6"
+            };
+
+        foreach (var (key, hex) in palette)
+        {
+            Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        }
+
+        Resources["AppBackdrop"] = darkModeActive
+            ? new LinearGradientBrush(Color.FromRgb(23, 33, 31), Color.FromRgb(24, 38, 43), 35)
+            : new LinearGradientBrush(Color.FromRgb(214, 238, 232), Color.FromRgb(213, 232, 240), 35);
+        ThemeIconText.Text = darkModeActive ? "☀" : "☾";
+        ThemeButtonText.Text = darkModeActive ? "Light mode" : "Dark mode";
+        ApplyCaptionTheme();
+        ShowStatus(StatusText.Text, statusIsError);
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -32,7 +125,14 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        batteryTimer.Stop();
+        batteryGeneration++;
         headset?.Dispose();
+    }
+
+    private async void BatteryTimer_Tick(object? sender, EventArgs e)
+    {
+        await RefreshBatteryAsync();
     }
 
     private async void Reconnect_Click(object sender, RoutedEventArgs e)
@@ -42,10 +142,14 @@ public partial class MainWindow : Window
 
     private async Task ConnectAsync()
     {
+        batteryTimer.Stop();
+        batteryGeneration++;
         isBusy = true;
         UpdateButtons();
         headset?.Dispose();
         headset = null;
+        missedBatteryReads = 0;
+        ShowBatteryStatus(null);
         ConnectionText.Text = "Looking for receiver";
         ConnectionDetail.Text = "Checking USB interface 5, collection 3";
         ConnectionIndicator.Fill = new SolidColorBrush(Color.FromRgb(213, 156, 66));
@@ -81,7 +185,85 @@ public partial class MainWindow : Window
         {
             isBusy = false;
             UpdateButtons();
+            if (headset is not null)
+            {
+                batteryTimer.Start();
+                await RefreshBatteryAsync();
+            }
         }
+    }
+
+    private async Task RefreshBatteryAsync()
+    {
+        if (headset is null || isBusy || isReadingBattery)
+        {
+            return;
+        }
+
+        isReadingBattery = true;
+        var device = headset;
+        var generation = batteryGeneration;
+        try
+        {
+            var battery = await Task.Run(device.ReadBatteryStatus);
+            if (generation == batteryGeneration && ReferenceEquals(device, headset))
+            {
+                if (battery is { } reading)
+                {
+                    missedBatteryReads = 0;
+                    ShowBatteryStatus(batteryEstimator.Update(reading, DateTimeOffset.UtcNow));
+                }
+                else if (++missedBatteryReads >= 3)
+                {
+                    ShowBatteryStatus(null);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            if (generation == batteryGeneration)
+            {
+                if (++missedBatteryReads >= 3)
+                {
+                    ShowBatteryStatus(null);
+                }
+            }
+        }
+        finally
+        {
+            isReadingBattery = false;
+        }
+    }
+
+    private void ShowBatteryStatus(BatteryEstimate? battery)
+    {
+        if (battery is null)
+        {
+            BatteryPercentText.Text = "--%";
+            ChargeStateText.Text = "Battery unavailable";
+            BatteryFill.Width = 0;
+            ChargeBolt.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var status = battery.Value;
+        BatteryPercentText.Text = $"~{status.Percent}%";
+        ChargeStateText.Text = status.ChargeState switch
+        {
+            BatteryChargeState.Charging => "Charging",
+            BatteryChargeState.FullyCharged => "Fully charged",
+            _ => "Not charging"
+        };
+        BatteryFill.Width = 19 * status.Percent / 100.0;
+        BatteryFill.Background = new SolidColorBrush(status.Percent switch
+        {
+            <= 20 => Color.FromRgb(196, 77, 69),
+            <= 50 => Color.FromRgb(205, 145, 51),
+            _ => Color.FromRgb(19, 123, 100)
+        });
+        ChargeBolt.Visibility = status.ChargeState == BatteryChargeState.Charging
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void StrengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -204,8 +386,11 @@ public partial class MainWindow : Window
     private void ShowStatus(string message, bool isError = false)
     {
         StatusText.Text = message;
+        statusIsError = isError;
         StatusText.Foreground = isError
-            ? new SolidColorBrush(Color.FromRgb(172, 51, 45))
+            ? new SolidColorBrush(darkModeActive
+                ? Color.FromRgb(255, 151, 145)
+                : Color.FromRgb(172, 51, 45))
             : (Brush)FindResource("Ink");
     }
 }
