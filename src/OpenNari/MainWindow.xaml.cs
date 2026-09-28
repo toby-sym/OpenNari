@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     private bool isReadingBattery;
     private int batteryGeneration;
     private int missedBatteryReads;
+    private bool darkModeActive;
+    private bool statusIsError;
     private readonly BatteryLevelEstimator batteryEstimator = new();
     private readonly DispatcherTimer batteryTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
@@ -30,22 +32,84 @@ public partial class MainWindow : Window
 
     private void Window_SourceInitialized(object? sender, EventArgs e)
     {
-        // Keep the native title bar and Windows 11 window controls while
-        // matching the light glass surface below them.
+        ApplyCaptionTheme();
+    }
+
+    private void ApplyCaptionTheme()
+    {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
         {
             return;
         }
 
         var handle = new WindowInteropHelper(this).Handle;
-        var captionColor = 0x00F0F1EA;
-        var textColor = 0x002B2C18;
+        var captionColor = darkModeActive ? 0x0026281E : 0x00F0F1EA;
+        var textColor = darkModeActive ? 0x00F3F5ED : 0x002B2C18;
         DwmSetWindowAttribute(handle, 35, ref captionColor, sizeof(int));
         DwmSetWindowAttribute(handle, 36, ref textColor, sizeof(int));
     }
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int valueSize);
+
+    private void ThemeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        darkModeActive = !darkModeActive;
+        var palette = darkModeActive
+            ? new Dictionary<string, string>
+            {
+                ["Ink"] = "#EFF6F4",
+                ["Muted"] = "#A9BCB8",
+                ["Accent"] = "#64D9B1",
+                ["WindowSurface"] = "#E0192826",
+                ["SurfaceBorder"] = "#557C8D86",
+                ["CardSurface"] = "#E0243330",
+                ["CardBorder"] = "#6D84927F",
+                ["QuietBackground"] = "#3549443F",
+                ["QuietForeground"] = "#E7F7F2",
+                ["InputSurface"] = "#D8293935",
+                ["InputBorder"] = "#70877F",
+                ["BatterySurface"] = "#313F3B",
+                ["HeaderSurface"] = "#DC283632",
+                ["ConnectionSurface"] = "#AA263936",
+                ["FooterSurface"] = "#D822312E",
+                ["FooterBorder"] = "#667F847E",
+                ["Separator"] = "#667C8984"
+            }
+            : new Dictionary<string, string>
+            {
+                ["Ink"] = "#182C2B",
+                ["Muted"] = "#647C79",
+                ["Accent"] = "#137B64",
+                ["WindowSurface"] = "#DAFFFFFF",
+                ["SurfaceBorder"] = "#F5FFFFFF",
+                ["CardSurface"] = "#EFFFFFFF",
+                ["CardBorder"] = "#AFCBDCD8",
+                ["QuietBackground"] = "#DDECE9",
+                ["QuietForeground"] = "#24544C",
+                ["InputSurface"] = "#EFFFFFFF",
+                ["InputBorder"] = "#B8D5D1",
+                ["BatterySurface"] = "#E4F3EF",
+                ["HeaderSurface"] = "#D9FFFFFF",
+                ["ConnectionSurface"] = "#A9EAF4F1",
+                ["FooterSurface"] = "#93FFFFFF",
+                ["FooterBorder"] = "#D8FFFFFF",
+                ["Separator"] = "#B3D9D9D6"
+            };
+
+        foreach (var (key, hex) in palette)
+        {
+            Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        }
+
+        Resources["AppBackdrop"] = darkModeActive
+            ? new LinearGradientBrush(Color.FromRgb(23, 33, 31), Color.FromRgb(24, 38, 43), 35)
+            : new LinearGradientBrush(Color.FromRgb(214, 238, 232), Color.FromRgb(213, 232, 240), 35);
+        ThemeIconText.Text = darkModeActive ? "☀" : "☾";
+        ThemeButtonText.Text = darkModeActive ? "Light mode" : "Dark mode";
+        ApplyCaptionTheme();
+        ShowStatus(StatusText.Text, statusIsError);
+    }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
@@ -322,8 +386,11 @@ public partial class MainWindow : Window
     private void ShowStatus(string message, bool isError = false)
     {
         StatusText.Text = message;
+        statusIsError = isError;
         StatusText.Foreground = isError
-            ? new SolidColorBrush(Color.FromRgb(172, 51, 45))
+            ? new SolidColorBrush(darkModeActive
+                ? Color.FromRgb(255, 151, 145)
+                : Color.FromRgb(172, 51, 45))
             : (Brush)FindResource("Ink");
     }
 }
