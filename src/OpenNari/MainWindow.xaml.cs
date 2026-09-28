@@ -1,9 +1,12 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 #if RELEASE_BUILD
 using System.Reflection;
 #endif
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using OpenNari.Core;
 
 namespace OpenNari;
@@ -12,11 +15,37 @@ public partial class MainWindow : Window
 {
     private NariDevice? headset;
     private bool isBusy;
+    private bool isReadingBattery;
+    private int batteryGeneration;
+    private int missedBatteryReads;
+    private readonly BatteryLevelEstimator batteryEstimator = new();
+    private readonly DispatcherTimer batteryTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     public MainWindow()
     {
         InitializeComponent();
+        SourceInitialized += Window_SourceInitialized;
+        batteryTimer.Tick += BatteryTimer_Tick;
     }
+
+    private void Window_SourceInitialized(object? sender, EventArgs e)
+    {
+        // Keep the native title bar and Windows 11 window controls while
+        // matching the light glass surface below them.
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            return;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        var captionColor = 0x00F0F1EA;
+        var textColor = 0x002B2C18;
+        DwmSetWindowAttribute(handle, 35, ref captionColor, sizeof(int));
+        DwmSetWindowAttribute(handle, 36, ref textColor, sizeof(int));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int valueSize);
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
@@ -32,7 +61,14 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        batteryTimer.Stop();
+        batteryGeneration++;
         headset?.Dispose();
+    }
+
+    private async void BatteryTimer_Tick(object? sender, EventArgs e)
+    {
+        await RefreshBatteryAsync();
     }
 
     private async void Reconnect_Click(object sender, RoutedEventArgs e)
@@ -42,10 +78,14 @@ public partial class MainWindow : Window
 
     private async Task ConnectAsync()
     {
+        batteryTimer.Stop();
+        batteryGeneration++;
         isBusy = true;
         UpdateButtons();
         headset?.Dispose();
         headset = null;
+        missedBatteryReads = 0;
+        ShowBatteryStatus(null);
         ConnectionText.Text = "Looking for receiver";
         ConnectionDetail.Text = "Checking USB interface 5, collection 3";
         ConnectionIndicator.Fill = new SolidColorBrush(Color.FromRgb(213, 156, 66));
@@ -81,7 +121,85 @@ public partial class MainWindow : Window
         {
             isBusy = false;
             UpdateButtons();
+            if (headset is not null)
+            {
+                batteryTimer.Start();
+                await RefreshBatteryAsync();
+            }
         }
+    }
+
+    private async Task RefreshBatteryAsync()
+    {
+        if (headset is null || isBusy || isReadingBattery)
+        {
+            return;
+        }
+
+        isReadingBattery = true;
+        var device = headset;
+        var generation = batteryGeneration;
+        try
+        {
+            var battery = await Task.Run(device.ReadBatteryStatus);
+            if (generation == batteryGeneration && ReferenceEquals(device, headset))
+            {
+                if (battery is { } reading)
+                {
+                    missedBatteryReads = 0;
+                    ShowBatteryStatus(batteryEstimator.Update(reading, DateTimeOffset.UtcNow));
+                }
+                else if (++missedBatteryReads >= 3)
+                {
+                    ShowBatteryStatus(null);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            if (generation == batteryGeneration)
+            {
+                if (++missedBatteryReads >= 3)
+                {
+                    ShowBatteryStatus(null);
+                }
+            }
+        }
+        finally
+        {
+            isReadingBattery = false;
+        }
+    }
+
+    private void ShowBatteryStatus(BatteryEstimate? battery)
+    {
+        if (battery is null)
+        {
+            BatteryPercentText.Text = "--%";
+            ChargeStateText.Text = "Battery unavailable";
+            BatteryFill.Width = 0;
+            ChargeBolt.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var status = battery.Value;
+        BatteryPercentText.Text = $"~{status.Percent}%";
+        ChargeStateText.Text = status.ChargeState switch
+        {
+            BatteryChargeState.Charging => "Charging",
+            BatteryChargeState.FullyCharged => "Fully charged",
+            _ => "Not charging"
+        };
+        BatteryFill.Width = 19 * status.Percent / 100.0;
+        BatteryFill.Background = new SolidColorBrush(status.Percent switch
+        {
+            <= 20 => Color.FromRgb(196, 77, 69),
+            <= 50 => Color.FromRgb(205, 145, 51),
+            _ => Color.FromRgb(19, 123, 100)
+        });
+        ChargeBolt.Visibility = status.ChargeState == BatteryChargeState.Charging
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void StrengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
